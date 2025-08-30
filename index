@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moderne Workstation</title>
+<style>
+:root{
+--bg:#0b0d2b; --panel:rgba(128,0,32,0.85); --text:#f5f5dc; --accent:#f5deb3;
+--warn:#f08080; --good:#c0a080; --high:#8b0000;
+}
+body{margin:0;font-family:'Arial',sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;}
+header{width:100%;padding:12px;background:var(--panel);text-align:center;font-weight:bold;border-bottom:1px solid #202635;}
+main{flex:1;display:flex;gap:20px;padding:10px;}
+section.left{width:280px;display:flex;flex-direction:column;gap:10px;}
+section.right{flex:1;display:flex;flex-direction:column;}
+.card{background:var(--panel);border-radius:16px;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,0.5);}
+h2{margin:0 0 8px 0;font-size:18px;}
+.task{display:flex;align-items:center;margin:6px 0;padding:6px 8px;background:rgba(255,255,255,0.05);border-radius:10px;transition:0.2s;}
+.task:hover{background:rgba(255,255,255,0.1);}
+.task span{flex:1;}
+.task small{margin-left:6px;font-size:0.85em;}
+.task button{margin-left:6px;background:var(--warn);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-weight:bold;}
+.timer{text-align:center;margin:12px 0;}
+.big{font-size:36px;font-weight:bold;margin:6px;}
+button.action{background:var(--accent);border:none;border-radius:50px;padding:8px 16px;cursor:pointer;font-weight:bold;margin:4px;}
+.reminder{text-align:center;margin:8px;font-size:16px;color:var(--warn);}
+.pause-task{margin-top:10px;padding:8px;background:rgba(0,0,50,0.4);border-radius:10px;text-align:center;}
+.postit{background:#f5deb3;color:#333;padding:16px;border-radius:8px;font-family:"Comic Sans MS",cursive;font-size:16px;transform:rotate(-1deg);box-shadow:2px 2px 6px rgba(0,0,0,0.3);cursor:pointer;max-width:240px;margin-bottom:10px;}
+input[type=number]{width:50px;margin-left:4px;margin-right:4px;}
+</style>
+</head>
+<body>
+<header>⚡ Aufgaben & Fokus</header>
+<main>
+<section class="left">
+<div class="card">
+<h2>💬 Motivation</h2>
+<div class="postit" id="postit">Klick mich für Weisheit</div>
+</div>
+<div class="card">
+<h2>📝 Aufgaben</h2>
+<input id="taskInput" placeholder="Neue Aufgabe..." style="width:100%">
+<input type="number" id="taskDuration" min="1" value="25"> Min
+<select id="taskPriority">
+<option value="high">🔥 Hoch</option>
+<option value="med">⚡ Mittel</option>
+<option value="low">🍃 Niedrig</option>
+</select>
+<button class="action" id="addTask">+</button>
+<div id="taskList"></div>
+</div>
+</section>
+<section class="right">
+<div class="card">
+<h2 id="phase">Fokus-Zeit</h2>
+<div class="timer">
+<div class="big" id="time">25:00</div>
+<button class="action" id="toggle">Start</button>
+<button class="action" id="reset">Reset</button>
+</div>
+<label>Pause (Min): <input type="number" id="breakMins" value="5"></label>
+<div class="reminder" id="waterMsg"></div>
+<div class="pause-task" id="pauseTask"></div>
+<div class="progress-bar" style="height:6px;width:100%;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-top:8px;"><div id="progress" style="height:100%;width:0%;background:var(--accent);transition:0.3s;"></div></div>
+</div>
+</section>
+</main>
+
+<audio id="beep" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"></audio>
+<audio id="pling" src="https://actions.google.com/sounds/v1/cartoon/pop.ogg"></audio>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+let tasks = JSON.parse(localStorage.getItem("tasks")||"[]");
+const taskList = document.getElementById("taskList");
+const progressBar = document.getElementById("progress");
+const postits=["Mach erstmal Kaffee, dann die Weltrettung.","Du bist nicht langsam, du bist nachhaltig.","Deadline? Klingt nach Lebenseinstellung.","Trink Wasser, sonst trinkt das Wasser dich.","Dein Chaos ist nur ungeordnete Kreativität.","Multitasking ist Prokrastination deluxe."];
+const postit = document.getElementById("postit");
+postit.onclick=()=>{postit.textContent=postits[Math.floor(Math.random()*postits.length)];};
+postit.textContent=postits[Math.floor(Math.random()*postits.length)];
+
+let isFocus=true, timer=null, timeLeft=25*60, breakMins=5, waterTimer=60*60, currentTask=null;
+const beep=document.getElementById("beep");
+const pling=document.getElementById("pling");
+const timeEl=document.getElementById("time");
+const phaseEl=document.getElementById("phase");
+const pauseTaskEl=document.getElementById("pauseTask");
+const waterMsg=document.getElementById("waterMsg");
+const pauseIdeas=["🎨 Male schnell einen Smiley","🚶 Hol dir frisches Wasser","🌿 Schau 1 Minute raus","✍️ Schreib ein Wort rückwärts","🎶 Summ dein Lieblingslied","🤸 Mach 10 Streckübungen"];
+
+function saveTasks(){localStorage.setItem("tasks",JSON.stringify(tasks)); renderTasks();}
+function renderTasks(){
+    taskList.innerHTML="";
+    tasks.forEach((t,i)=>{
+        const div=document.createElement("div");
+        div.className="task priority-"+t.priority;
+        const span=document.createElement("span"); span.textContent=t.text;
+        div.append(span);
+        const del=document.createElement("button"); del.textContent="x"; del.onclick=()=>{tasks.splice(i,1); saveTasks();};
+        div.append(del);
+        div.onclick=(e)=>{if(e.target.tagName!=="BUTTON"){currentTask=t; timeLeft=t.duration*60; isFocus=true; phaseEl.textContent="Fokus-Zeit"; updateTime(); toggleTimer();}};
+        taskList.append(div);
+    });
+}
+
+function updateTime(){let m=Math.floor(timeLeft/60),s=timeLeft%60; timeEl.textContent=`${m}:${s.toString().padStart(2,"0")}`; if(currentTask) progressBar.style.width=`${100*(1-(timeLeft/(currentTask.duration*60)))}%`;}
+
+function tick(){if(timeLeft>0){timeLeft--;waterTimer--;updateTime(); checkWater();}
+else{beep.play(); clearInterval(timer); timer=null; document.getElementById("toggle").textContent="Start";
+if(isFocus){isFocus=false; timeLeft=breakMins*60; phaseEl.textContent="Pause"; pauseTaskEl.textContent="👉 "+pauseIdeas[Math.floor(Math.random()*pauseIdeas.length)]; toggleTimer();}
+else{if(currentTask) timeLeft=currentTask.duration*60; else timeLeft=25*60; isFocus=true; phaseEl.textContent="Fokus-Zeit"; pauseTaskEl.textContent=""; toggleTimer();}}}
+
+function toggleTimer(){if(timer){clearInterval(timer);timer=null; document.getElementById("toggle").textContent="Start"; return;} timer=setInterval(tick,1000); document.getElementById("toggle").textContent="Stop";}
+document.getElementById("toggle").onclick=toggleTimer;
+document.getElementById("reset").onclick=()=>{if(timer) clearInterval(timer); timer=null; currentTask=null; timeLeft=25*60; updateTime(); phaseEl.textContent="Fokus-Zeit"; pauseTaskEl.textContent=""; progressBar.style.width="0%";};
+
+document.getElementById("addTask").onclick=()=>{
+    const inp=document.getElementById("taskInput");
+    const dur=document.getElementById("taskDuration");
+    const prio=document.getElementById("taskPriority");
+    if(inp.value.trim()){tasks.push({text:inp.value,duration:+dur.value,priority:prio.value}); inp.value=""; dur.value="25"; prio.value="med"; saveTasks();}
+};
+
+function checkWater(){if(waterTimer<=0){waterMsg.textContent="💧 Trink mal was!"; pling.play(); waterTimer=60*60;}}
+renderTasks(); updateTime();
+});
+</script>
